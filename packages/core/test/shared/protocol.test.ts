@@ -191,6 +191,28 @@ describe('protocol tests', () => {
         expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
     });
 
+    test('should respond with InvalidParams (-32602) when a spec method handler receives invalid params', async () => {
+        await protocol.connect(transport);
+        // Register a spec-method handler via the function form, so dispatch validates
+        // params against the built-in schema.
+        protocol.setRequestHandler('logging/setLevel', async () => ({}));
+
+        transport.onmessage?.({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'logging/setLevel',
+            params: { level: 'not-a-level' }
+        });
+
+        await vi.waitFor(() => {
+            const sent = sendSpy.mock.calls.map(call => call[0] as JSONRPCErrorResponse);
+            expect(sent.some(msg => 'error' in msg && msg.id === 1)).toBe(true);
+        });
+
+        const errorResponse = sendSpy.mock.calls.map(call => call[0] as JSONRPCErrorResponse).find(msg => 'error' in msg && msg.id === 1)!;
+        expect(errorResponse.error.code).toBe(ProtocolErrorCode.InvalidParams);
+    });
+
     test('should not overwrite existing hooks when connecting transports', async () => {
         const oncloseMock = vi.fn();
         const onerrorMock = vi.fn();

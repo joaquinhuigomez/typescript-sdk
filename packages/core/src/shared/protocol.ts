@@ -920,7 +920,21 @@ export abstract class Protocol<ContextT extends BaseContext> {
                     `'${method}' is not a spec request method; pass schemas as the second argument to setRequestHandler().`
                 );
             }
-            stored = (request, ctx) => Promise.resolve(schemasOrHandler(schema.parse(request), ctx));
+            stored = (request, ctx) => {
+                let parsedRequest;
+                try {
+                    parsedRequest = schema.parse(request);
+                } catch (error) {
+                    // Mirror the schemas-object path below: a dispatch-time params
+                    // validation failure is a client error (-32602 InvalidParams),
+                    // not a server fault (-32603 InternalError).
+                    throw new ProtocolError(
+                        ProtocolErrorCode.InvalidParams,
+                        `Invalid params for ${method}: ${error instanceof Error ? error.message : String(error)}`
+                    );
+                }
+                return Promise.resolve(schemasOrHandler(parsedRequest, ctx));
+            };
         } else if (maybeHandler) {
             stored = async (request, ctx) => {
                 const userParams = { ...request.params };
